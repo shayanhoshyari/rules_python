@@ -42,6 +42,11 @@ def create_venv_app_files(ctx, deps, venv_dir_map):
         ],
     ).to_list()
 
+
+    # for entry in entries:
+        # if "libnccl.so.2" in entry.link_to_path:
+        #     print("\n\tentry.venv_path:", entry.venv_path, "\n\tentry.link_to_path:", entry.link_to_path)
+
     link_map = build_link_map(ctx, entries)
     venv_files = []
     for kind, kind_map in link_map.items():
@@ -101,7 +106,6 @@ def build_link_map(ctx, entries):
         if entry.version == version_by_pkg[entry.package]:
             entries_by_kind[entry.kind].append(entry)
             continue
-
         # else: ignore it; not the selected version
 
     # final paths to keep, grouped by kind
@@ -113,6 +117,7 @@ def build_link_map(ctx, entries):
         groups = _group_venv_path_entries(entries)
 
         for group in groups:
+            print("\n\tgroup:", group[0].venv_path, len(group))
             # If there's just one group, we can symlink to the directory
             if len(group) == 1:
                 entry = group[0]
@@ -124,6 +129,7 @@ def build_link_map(ctx, entries):
                 # Merge a group of overlapping prefixes
                 _merge_venv_path_group(ctx, group, keep_kind_link_map)
 
+        print("\n\tkeep_kind_link_map:", keep_kind_link_map)
         keep_link_map[kind] = keep_kind_link_map
 
     return keep_link_map
@@ -148,9 +154,11 @@ def _group_venv_path_entries(entries):
     groups = []
     current_group = None
     current_group_prefix = None
+
     for entry in entries:
         prefix = entry.venv_path
         anchored_prefix = prefix + "/"
+
         if (current_group_prefix == None or
             not anchored_prefix.startswith(current_group_prefix)):
             current_group_prefix = anchored_prefix
@@ -158,6 +166,11 @@ def _group_venv_path_entries(entries):
             groups.append(current_group)
         else:
             current_group.append(entry)
+
+    # We indeed are included here.
+    # for group in groups:
+    #     if any([g.venv_path.startswith("nvidia/") for g in group]):
+    #         print("\n\tThe group is:", group)
 
     return groups
 
@@ -186,9 +199,16 @@ def _merge_venv_path_group(ctx, group, keep_map):
             # entry.venv_path
             rf_root_path = runfiles_root_path(ctx, file.short_path)
             if not rf_root_path.startswith(entry.link_to_path):
+                if entry.venv_path.startswith("nvidia/"):
+                    print("\n\t .so. loses\n\t entry.files", entry.files.to_list(), "\n\tentry.venv_path:", entry.venv_path, "\n\trf_root_path:", rf_root_path, "\n\tentry.link_to_path:", entry.link_to_path)
+
                 # This generally shouldn't occur in practice, but just
                 # in case, skip them, for lack of a better option.
                 continue
+
+            # if entry.venv_path.startswith("nvidia/"):
+            #     print("\n\tentry.venv_path:", entry.venv_path, "\n\trf_root_path:", rf_root_path, "\n\tentry.link_to_path:", entry.link_to_path)
+
             venv_path = "{}/{}".format(
                 prefix,
                 rf_root_path.removeprefix(entry.link_to_path + "/"),
@@ -197,6 +217,9 @@ def _merge_venv_path_group(ctx, group, keep_map):
             # For lack of a better option, first added wins. We happen to
             # go in top-down prefix order, so the highest level namespace
             # package typically wins.
+            if ".so." in venv_path:
+                print("\n\t .so. WINS", "\n\tentry.files", entry.files.to_list(), "\n\tentry.venv_path:", entry.venv_path, "\n\trf_root_path:", rf_root_path, "\n\tentry.link_to_path:", entry.link_to_path)
+
             if venv_path not in keep_map:
                 keep_map[venv_path] = file
 
@@ -267,6 +290,16 @@ def get_venv_symlinks(ctx, files, package, version_str, site_packages_root):
                 files = depset([src]),
             )
             venv_symlinks.append(entry)
+
+            if "libnccl.so.2" in src.short_path or "libcufft.so.11" in src.short_path:
+                # print("Path:", path)
+                # print("src.short_path:", src.short_path)
+                # print("dir_name:", dir_name)
+                # print("runfiles_dir_name:", grunfiles_dir_name)
+                # print("filename:", filename)
+                print("\n\tentry:", entry, "\n\trunfiles_dir_name:", runfiles_dir_name, "\n\tsite_packages_root:", site_packages_root, "\n\tfilename:", filename)
+
+
             continue
 
         if dir_name in dir_symlinks:
