@@ -199,7 +199,8 @@ def _merge_venv_path_group(ctx, group, keep_map):
             # entry.venv_path
             rf_root_path = runfiles_root_path(ctx, file.short_path)
             if not rf_root_path.startswith(entry.link_to_path):
-                if entry.venv_path.startswith("nvidia/"):
+
+                if ".so." in entry.venv_path or entry.venv_path.endswith(".so") or entry.venv_path.endswith(".dylib"):
                     print("\n\t .so. loses\n\t entry.files", entry.files.to_list(), "\n\tentry.venv_path:", entry.venv_path, "\n\trf_root_path:", rf_root_path, "\n\tentry.link_to_path:", entry.link_to_path)
 
                 # This generally shouldn't occur in practice, but just
@@ -217,8 +218,8 @@ def _merge_venv_path_group(ctx, group, keep_map):
             # For lack of a better option, first added wins. We happen to
             # go in top-down prefix order, so the highest level namespace
             # package typically wins.
-            if ".so." in venv_path:
-                print("\n\t .so. WINS", "\n\tentry.files", entry.files.to_list(), "\n\tentry.venv_path:", entry.venv_path, "\n\trf_root_path:", rf_root_path, "\n\tentry.link_to_path:", entry.link_to_path)
+            if ".so." in venv_path or venv_path.endswith(".so") or venv_path.endswith(".dylib"):
+                print("\n\t .so. WINS", "\n\tentry.files", entry.files.to_list(), "\n\tvenv_path:", venv_path, "\n\tentry.venv_path:", entry.venv_path, "\n\trf_root_path:", rf_root_path, "\n\tentry.link_to_path:", entry.link_to_path)
 
             if venv_path not in keep_map:
                 keep_map[venv_path] = file
@@ -279,6 +280,8 @@ def get_venv_symlinks(ctx, files, package, version_str, site_packages_root):
         dir_name, _, filename = path.rpartition("/")
         runfiles_dir_name, _, _ = runfiles_root_path(ctx, src.short_path).partition("/")
 
+        print("\n\tAdding entry for:", src.short_path, "filename:", filename, "dir_name:", dir_name, "is_linker_loaded_library:", _is_linker_loaded_library(filename))
+
         if _is_linker_loaded_library(filename):
             entry = VenvSymlinkEntry(
                 kind = VenvSymlinkKind.LIB,
@@ -291,13 +294,7 @@ def get_venv_symlinks(ctx, files, package, version_str, site_packages_root):
             )
             venv_symlinks.append(entry)
 
-            if "libnccl.so.2" in src.short_path or "libcufft.so.11" in src.short_path:
-                # print("Path:", path)
-                # print("src.short_path:", src.short_path)
-                # print("dir_name:", dir_name)
-                # print("runfiles_dir_name:", grunfiles_dir_name)
-                # print("filename:", filename)
-                print("\n\tentry:", entry, "\n\trunfiles_dir_name:", runfiles_dir_name, "\n\tsite_packages_root:", site_packages_root, "\n\tfilename:", filename)
+            print("\n\tentry:", entry, "\n\trunfiles_dir_name:", runfiles_dir_name, "\n\tsite_packages_root:", site_packages_root, "\n\tfilename:", filename)
 
 
             continue
@@ -330,6 +327,10 @@ def get_venv_symlinks(ctx, files, package, version_str, site_packages_root):
                 files = depset([src]),
             )
             venv_symlinks.append(entry)
+
+    # not package for the unit tests
+    if not package or "nvidia_" in package:
+        print("\n\tpackage:", package, "\n\tdir_symlinks:", dir_symlinks)
 
     # Sort so that we encounter `foo` before `foo/bar`. This ensures we
     # see the top-most explicit package first.

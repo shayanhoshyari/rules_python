@@ -47,7 +47,10 @@ cc_shared_library(
     # 2. Adds -lincrement (DT_NEEDED for libincrement.so)
     # 3. Ensures libincrement.so is available at link time to satisfy (2)
     dynamic_deps = [":increment"],
-    shared_lib_name = "adder.so",
+    # Part 1 To make this test fail:
+    # we need to name this to start with `lib` so that 
+    # _is_linker_loaded_library() returns true.
+    shared_lib_name = "libadder.so",
     tags = ["manual"],
     # NOTE: cc_shared_library adds Bazelized rpath entries, too.
     user_link_flags = [
@@ -70,7 +73,9 @@ cc_shared_library(
 copy_file_to_dir(
     name = "relocate_adder",
     src = ":adder",
-    out_dir = "site-packages/ext_with_libs",
+    # Part 2 To make this test fail:
+    # Move adder to same folder as increment so group size > 2
+    out_dir = "site-packages/ext_with_libs/libs",
     tags = ["manual"],
 )
 
@@ -82,8 +87,21 @@ copy_file_to_dir(
 )
 
 py_library(
+    name = "ext_headers",
+    # Part 3 Separate the header to another lib to emulate what happens
+    # with nvidia. We get a giant group with prefix ext_with_lib, instead
+    # of various small groups.
+    srcs = ["site-packages/ext_with_libs/__init__.py"],
+    experimental_venvs_site_packages = "//python/config_settings:venvs_site_packages",
+    imports = [package_name() + "/site-packages"],
+    tags = ["manual"],
+)
+
+py_library(
     name = "ext_with_libs",
-    srcs = glob(["site-packages/**/*.py"]),
+    deps = [":ext_headers"],
+    # Revert to this and see .so s appear!
+    # srcs = ["site-packages/ext_with_libs/__init__.py"],
     data = [
         ":relocate_adder",
         ":relocate_increment",
@@ -92,3 +110,12 @@ py_library(
     imports = [package_name() + "/site-packages"],
     tags = ["manual"],
 )
+
+
+# Run bazel build tests/venv_site_packages_libs:shared_lib_loading_test
+# Observe adder and increment are missing
+# ```
+# ls bazel-bin/tests/venv_site_packages_libs/shared_lib_loading_test.runfiles/_main/tests/venv_site_packages_libs/_shared_lib_loading_test.venv/lib/python3.11/site-packages/ext_with_libs/
+# __init__.py
+# ```
+# Simply just revert change 3, and observe they appear!
